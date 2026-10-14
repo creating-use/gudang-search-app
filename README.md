@@ -1,6 +1,6 @@
 # Pencarian Informasi Stok dan Transaksi Gudang
 
-Contoh aplikasi untuk **CV Gudang Sejahtera (kasus simulasi)** pada Project "AI Solution for Enterprise".
+Contoh aplikasi untuk **CV Gudang Sejahtera (kasus simulasi)**.
 Data fiktif. Aplikasi membantu menelusuri catatan barang dari beberapa sumber yang tidak seragam dan
 menampilkan **kandidat, sumber, serta peringatan** — bukan satu angka stok yang dianggap pasti.
 
