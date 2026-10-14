@@ -113,10 +113,10 @@ def build_candidate(conn: sqlite3.Connection, row, score: float, reason: str,
     for _, e in end.iterrows():
         note = "; ".join(x for x in [e["qty_flag"], f"update: {e['update_raw']}" if e["update_raw"] else None,
                                      f"PIC {e['pic']}" if e["pic"] else None] if x)
-        c.stock_values.append({"Sumber": "Catatan stok per 31 Agustus", "Nilai asli": _fmt(e["qty_raw"]),
+        c.stock_values.append({"Sumber": "Catatan stok akhir", "Nilai asli": _fmt(e["qty_raw"]),
                                "Angka terbaca": _fmt(_n(e["qty_num"])), "Catatan": note, "Rujukan": e["sumber"]})
         if e["update_flag"] and e["update_flag"] != "kosong":
-            c.warnings.append(f"Tanggal update pada catatan 31 Agustus tidak jelas ('{e['update_raw']}').")
+            c.warnings.append(f"Tanggal update pada catatan stok akhir tidak jelas ('{e['update_raw']}').")
 
     # --- peringatan stok
     nums = [v["Angka terbaca"] for v in c.stock_values if v["Angka terbaca"] != "—"]
@@ -279,4 +279,27 @@ def search_items(conn: sqlite3.Connection, query: str) -> SearchResult:
             "secara fisik — periksa ejaan atau coba kata kunci lain."))
     cands = [build_candidate(conn, r, s, why, items) for s, why, r in scored[:MAX_CANDIDATES]]
     msg = f"{len(cands)} kandidat ditemukan." + (" Beberapa kandidat bisa jadi barang yang sama — bandingkan sebelum memilih." if len(cands) > 1 else "")
+    return SearchResult(query, "ok", message=msg, candidates=cands)
+
+
+def merge_by_names(conn: sqlite3.Connection, query: str, names: list[str]) -> SearchResult | None:
+    """Jalankan pencarian biasa untuk nama barang hasil pemahaman AI, lalu gabungkan kandidatnya (unik per kode).
+
+    Kandidat tetap berasal dari data; AI hanya memilih nama yang SUDAH ada pada data.
+    """
+    seen: dict[str, Candidate] = {}
+    for name in names:
+        res = search_items(conn, name)
+        if res.status != "ok":
+            continue
+        for c in res.candidates:
+            if c.kode in seen or c.score < 0.9:   # hanya kecocokan nama kuat
+                continue
+            c.reason = f"{c.reason}; kata kunci '{query}' dipahami AI sebagai '{name}'"
+            seen[c.kode] = c
+    cands = list(seen.values())[:MAX_CANDIDATES]
+    if not cands:
+        return None
+    msg = (f"{len(cands)} kandidat ditemukan lewat pemahaman AI atas kata kunci '{query}'. "
+           "Periksa apakah kandidat sesuai dengan yang Anda maksud.")
     return SearchResult(query, "ok", message=msg, candidates=cands)
