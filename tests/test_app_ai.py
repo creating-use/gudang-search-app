@@ -117,6 +117,13 @@ def test_panel_diagnostik_hanya_bila_debug_aktif():
     at2 = search(fresh({"GEMINI_API_KEY": "k"}, fake_transport), "bohlam")
     assert not list(at2.sidebar.expander)
 
+def test_keterangan_ai_tetap_tampil_saat_pencarian_diulang():
+    at = search(fresh({"GEMINI_API_KEY": "k"}, empty_transport), "sepeda motor")
+    at.run()
+    caps = [c.value for c in at.caption if "AI sudah dimintai bantuan" in c.value]
+    assert caps and len(CALLS) == 1, (caps, len(CALLS))
+
+
 
 if __name__ == "__main__":
     fails = 0
