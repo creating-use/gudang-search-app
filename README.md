@@ -1,101 +1,125 @@
-# Pencarian Informasi Stok dan Transaksi Gudang
+# Gudang Search
 
-Aplikasi **Gudang Search** untuk **CV Gudang Sejahtera (kasus simulasi)**.
-Data fiktif. Aplikasi membantu menelusuri catatan barang dari beberapa sumber yang tidak seragam dan
-menampilkan **kandidat, sumber, serta peringatan** — bukan satu angka stok yang dianggap pasti.
+Aplikasi web untuk menelusuri **informasi stok dan transaksi barang gudang** dari beberapa sumber catatan yang tidak seragam.
+Hasil pencarian menampilkan **kandidat barang, nilai per sumber beserta rujukannya, dan peringatan** bila data berbeda atau
+tidak lengkap, bukan satu angka stok yang dianggap pasti. Aplikasi bersifat hanya-baca dan tidak menggantikan pengecekan fisik stok.
 
-## Yang dilakukan aplikasi
-- Mencari berdasarkan nama barang (toleran penulisan berbeda), kode (mis. `BRG013`), atau lokasi rak (mis. `A1`).
-- Menampilkan nilai stok **per sumber** beserta rujukan sheet dan nomor baris.
-- Menandai: angka stok berbeda antar sumber, nilai perkiraan / tidak diketahui / kosong, kode berbeda dengan nama
-  serupa (**tidak digabung**), transaksi duplikat, transaksi tanpa kode, tanggal yang tidak jelas.
-- Menjawab pertanyaan umum: "stok menipis", "data perlu verifikasi".
-- Jika tidak ada data: menyatakan **tidak ditemukan**, tidak mengarang hasil.
+## Cara menggunakan
 
-Pendekatan: **pencarian berbasis aturan selalu berjalan lebih dulu**. AI (Gemini lewat Google AI Studio) bersifat **opsional dan dibatasi**:
-aplikasi tetap berfungsi penuh tanpa API key.
+1. **Buka aplikasi** melalui browser. Tidak ada login.
+2. **Ketik pencarian** pada kolom di bagian atas, lalu tekan Enter. Anda dapat mencari dengan:
+   - nama barang, mis. `lampu LED 12W` (penulisan yang sedikit berbeda tetap dikenali),
+   - kode barang, mis. `BRG013`,
+   - lokasi rak, mis. `A1`,
+   - atau memilih salah satu tombol contoh di bawah kolom pencarian.
+3. **Baca hasilnya.** Setiap kandidat menampilkan:
 
-## Fitur AI (opsional, dibatasi)
-| Kapan AI dipakai | Apa yang dilakukan | Pengaman |
-|---|---|---|
-| Aturan **tidak menemukan apa pun** (bukan pencarian kode) | Memetakan kata kunci ke **nama barang yang ada pada data** (mis. "bohlam" -> "Lampu LED 12 watt") | Nama di luar data dibuang; hasil tetap dicari ulang dari data |
-| Pengguna menekan **"Jelaskan dengan AI"** | Menjelaskan hasil yang sudah ditemukan, dengan rujukan sheet/baris (pola RAG: retrieval berbasis aturan -> penjelasan oleh LLM) | Angka pada jawaban harus ada pada data yang dikirim, kalau tidak jawaban ditolak |
+   | Bagian | Artinya |
+   |---|---|
+   | Perlu verifikasi | Peringatan data: angka stok berbeda antar sumber, nilai perkiraan atau kosong, kode berbeda dengan nama serupa, transaksi ganda, dan sejenisnya |
+   | Nilai stok per sumber | Angka dari tiap sumber, lengkap dengan rujukan (nama sheet dan nomor baris) agar dapat dicek ulang |
+   | Barang dengan nama serupa | Barang lain yang mungkin sama; **tidak digabung** otomatis |
+   | Transaksi | Catatan barang masuk dan keluar. Total masuk/keluar bukan stok akhir karena saldo awal tidak tersedia |
+   | Catatan WhatsApp | Pesan yang menyebut barang tersebut |
 
-Batas pemakaian (default, sesuai free tier Gemini 3.5 Flash Lite pada akun pemilik: 15 RPM, 250K TPM, 500 RPD):
-| Aturan | Nilai default |
-|---|---|
-| Tombol AI disembunyikan bila permintaan per 60 detik | >= 8 (dari 15) |
-| Disembunyikan bila token per 60 detik | >= 60% dari 250K |
-| Disembunyikan bila permintaan per 24 jam | >= 80% dari 500 |
-| Pemahaman kata kunci otomatis berhenti lebih awal | 2 permintaan lebih rendah dari batas tombol (cadangan untuk tombol) |
-| Maksimal panggilan per sesi pengguna | 8 |
-| Jeda minimal antarpanggilan | 3 detik |
-| Setelah error 429 dari API | AI dijeda minimal 90 detik |
-| 3 kegagalan beruntun | AI dijeda 5 menit (circuit breaker) |
-| Kata kunci | 3 sampai 120 karakter; jawaban yang sama disimpan 1 jam (tidak memakai kuota) |
-| Panjang jawaban | maksimal 600 token keluaran |
+4. **Pertanyaan umum.** Ketik `stok menipis` untuk melihat barang di bawah stok minimum atau yang stoknya tidak jelas, atau
+   `data perlu verifikasi` untuk daftar barang yang memiliki peringatan data.
+5. **Jika data tidak ada**, aplikasi menyatakan tidak ditemukan dan tidak mengarang hasil. Itu tidak berarti barangnya tidak
+   ada secara fisik: periksa ejaan, coba kata kunci lain, atau cek catatan sumber.
 
-Bila AI tidak bisa dipanggil (kuota, jaringan, kunci kosong, jawaban ditolak validasi), aplikasi **kembali ke hasil berbasis
-aturan** dan menampilkan pesan singkat, tanpa error mentah. Penghitung pemakaian ada di memori server dan kembali nol saat
-aplikasi restart; pemakaian kunci yang sama di tempat lain tidak terhitung. Karena itu batas dibuat jauh di bawah limit asli.
+## Fitur AI (opsional)
 
-### Mengatur kunci API
-Jangan menaruh kunci di kode atau repo (repo ini publik). Di Streamlit Community Cloud: *App settings -> Secrets*, isi:
+Pencarian utama berbasis aturan dan selalu berjalan lebih dulu. Fitur AI hanya aktif bila kunci API dikonfigurasi; tanpa itu
+aplikasi tetap berfungsi penuh. AI dipakai pada dua keadaan:
+
+- **Memahami kata kunci.** Bila aturan tidak menemukan hasil, AI memetakan kata kunci ke nama barang yang ada pada data
+  (misalnya "bohlam" ke "lampu"). Hasilnya tetap dicari dari data; nama di luar data diabaikan.
+- **Penjelasan hasil.** Tombol **Jelaskan dengan AI** menyusun ringkasan dari hasil yang sudah ditemukan, dengan rujukan
+  sheet dan baris. Jawaban yang memuat angka yang tidak ada pada data ditolak. Penjelasan AI bukan data sumber: selalu periksa rujukannya.
+
+Bila AI tidak dapat dipanggil (kuota, jaringan, kunci tidak diatur, atau jawaban tidak lolos validasi), aplikasi kembali ke
+hasil berbasis aturan dan menampilkan pesan singkat.
+
+### Mengatur AI
+
+Simpan kunci di pengaturan *secrets* platform atau di `.streamlit/secrets.toml` (sudah masuk `.gitignore`); **jangan** menaruhnya
+di kode atau repository. Contoh ada pada `.streamlit/secrets.toml.example`:
+
 ```
-GEMINI_API_KEY = "kunci-dari-google-ai-studio"
-GEMINI_MODEL = "gemini-3.5-flash-lite"   # samakan persis dengan model ID di AI Studio
+GEMINI_API_KEY = "isi-kunci-api-anda"
+GEMINI_MODEL = "isi-model-id-yang-tersedia-di-akun-anda"
 ```
-Secara lokal: salin `.streamlit/secrets.toml.example` menjadi `.streamlit/secrets.toml` (sudah di `.gitignore`).
-Pengaturan opsional: `LLM_ENABLED = "false"` (matikan AI), `LLM_RPM_HIDE_AT`, `LLM_SESSION_MAX_CALLS`, `GEMINI_MAX_OUTPUT_TOKENS`.
 
-## Struktur
-| Berkas | Fungsi |
-|---|---|
-| `app.py` | Antarmuka web (Streamlit) |
-| `data_processing.py` | Membaca Excel, menormalisasi, membangun SQLite di memori |
-| `search_service.py` | Logika pencarian, pencocokan, dan peringatan (berbasis aturan) |
-| `llm_service.py` | Lapisan AI opsional: klien Gemini, pagar pemakaian, validasi keluaran |
-| `data/` | Dua berkas Excel simulasi (`Berkas_Gudang_Dari_Perusahaan.xlsx`, `Catatan_Stok_Akhir.xlsx`) |
-| `tests/` | Uji logika dan uji asap antarmuka |
-| `requirements.txt` | Daftar dependency |
+### Rekomendasi pengaturan batas pemakaian
 
-## Menjalankan secara lokal
+Sesuaikan dengan kuota akun Anda. Nilai bawaan ada di `llm_service.py` dan dapat diubah lewat secrets.
+
+- Sembunyikan tombol AI **jauh sebelum** batas permintaan per menit dan per hari tercapai, dan sisakan cadangan untuk penjelasan lewat tombol.
+- Batasi jumlah panggilan per sesi pengguna dan beri jeda minimal antarpanggilan.
+- Simpan jawaban untuk pertanyaan yang sama agar tidak memakai kuota lagi.
+- Jeda otomatis setelah error batas penggunaan dari penyedia API, dan setelah beberapa kegagalan beruntun.
+- Batasi panjang kata kunci, jumlah data yang dikirim, dan panjang jawaban.
+- Sediakan saklar mati (`LLM_ENABLED = "false"`) untuk mematikan AI tanpa mengubah kode.
+- Hitungan pemakaian pada aplikasi bersifat perkiraan (disimpan di memori dan kembali nol saat aplikasi restart), jadi sisakan margin dari batas sebenarnya.
+- Gunakan `LLM_DEBUG = "true"` hanya sementara saat menguji: panel diagnostiknya terlihat semua pengunjung.
+
+## Memperbarui data
+
+Data dibaca dari dua berkas Excel di folder `data/`. Untuk memperbarui, **ganti isi berkas dengan nama yang sama**, lalu
+commit ke repository (atau jalankan ulang aplikasi bila dipakai lokal).
+
+- `Berkas_Gudang_Dari_Perusahaan.xlsx` harus memiliki sheet `Stok Barang`, `Barang Masuk`, `Barang Keluar`, dan `Catatan WA`
+  (huruf besar/kecil bebas).
+- `Catatan_Stok_Akhir.xlsx`: sheet pertama yang dibaca, namanya bebas.
+- Kolom dikenali dari **nama header**, bukan urutan. Kolom dan baris baru boleh ditambahkan; baris kosong dilewati.
+- Kolom wajib: Stok Barang (kode, nama, stok), Barang Masuk/Keluar (tanggal, kode, jumlah), Catatan WA (tanggal, pesan), Stok Akhir (kode, qty).
+  Jika sheet atau kolom wajib hilang, aplikasi menampilkan pesan yang menyebut apa yang kurang.
+
+## Menjalankan di komputer sendiri
+
 ```
 pip install -r requirements.txt
 streamlit run app.py
 ```
-Uji (tanpa memanggil API sungguhan): `python tests/test_search.py`, `python tests/test_llm.py`, `python tests/test_app_ai.py`, `python tests/test_app_smoke.py`.
 
-## Mendapatkan URL publik (platform bebas pilihan)
-Platform apa pun yang dapat menjalankan aplikasi Python dari repository bisa dipakai. Yang umumnya diminta platform:
+## Men-deploy
+
+Platform apa pun yang dapat menjalankan aplikasi Python dari repository bisa dipakai.
 
 | Isian | Nilai |
 |---|---|
 | Build / install command | `pip install -r requirements.txt` |
 | Start command | `streamlit run app.py --server.port $PORT --server.address 0.0.0.0` |
-| Entry file (jika platform meminta berkas utama) | `app.py` |
-| Environment variable | Tidak ada yang wajib |
+| Entry file (jika diminta) | `app.py` |
+| Secrets | Opsional; hanya untuk fitur AI |
 
-Catatan:
-- Database SQLite **dibangun ulang dari Excel setiap aplikasi start**, sehingga tetap benar pada platform yang
-  menghapus file lokal saat restart.
-- Beberapa platform gratis menidurkan aplikasi saat sepi; buka URL beberapa menit sebelum demo.
-- Batas memori dan fitur gratis tiap platform dapat berubah; cek dokumentasi platform sebelum memilih.
-- Aplikasi sudah di-deploy di Streamlit Community Cloud (Python 3.14); uji otomatis dijalankan lokal.
+Catatan: basis data SQLite dibangun ulang dari Excel setiap aplikasi mulai, jadi tidak bergantung pada file lokal yang permanen.
+Beberapa platform gratis menidurkan aplikasi saat sepi; buka aplikasi beberapa menit sebelum dipakai. Batas fitur gratis tiap
+platform dapat berubah, jadi periksa dokumentasi platform.
 
-## Memperbarui data (Excel)
-Data dibaca dari dua berkas di folder `data/`. Untuk memperbarui, **ganti isi berkas dengan nama yang sama** lalu commit ke repository
-(Streamlit Community Cloud men-deploy ulang saat ada perubahan; periksa di dasbor platform bila belum). Aturannya:
-- `Berkas_Gudang_Dari_Perusahaan.xlsx` harus memiliki sheet `Stok Barang`, `Barang Masuk`, `Barang Keluar`, `Catatan WA` (huruf besar/kecil bebas).
-- `Catatan_Stok_Akhir.xlsx`: sheet pertama dibaca, namanya bebas (mis. "Agustus 2026", "September 2026").
-- Kolom dikenali dari **nama header**, bukan urutan. Kolom baru boleh ditambah; baris baru boleh ditambah; baris kosong dilewati.
-- Kolom wajib: Stok Barang (kode, nama, stok), Barang Masuk/Keluar (tanggal, kode, jumlah), Catatan WA (tanggal, pesan), Stok Akhir (kode, qty).
-  Jika sheet atau kolom wajib hilang, aplikasi menampilkan pesan yang menyebut apa yang kurang, bukan error mentah.
-- Jangan menaruh data perusahaan nyata pada repository publik.
+## Struktur proyek
+
+| Berkas | Fungsi |
+|---|---|
+| `app.py` | Antarmuka web (Streamlit) |
+| `data_processing.py` | Membaca Excel, menormalisasi, membangun SQLite di memori |
+| `search_service.py` | Logika pencarian, pencocokan, dan peringatan (berbasis aturan) |
+| `llm_service.py` | Lapisan AI opsional: klien API, pagar pemakaian, validasi keluaran |
+| `data/` | Berkas data Excel |
+| `tests/` | Uji logika, uji AI (tanpa memanggil API sungguhan), dan uji asap antarmuka |
+| `requirements.txt` | Daftar dependency |
+
+Menjalankan uji: `python tests/test_search.py`, `python tests/test_llm.py`, `python tests/test_app_ai.py`, `python tests/test_app_smoke.py`.
 
 ## Keterbatasan
+
 - Total masuk/keluar bukan stok akhir karena saldo awal tidak ada pada data.
-- Tanggal numerik dibaca hari/bulan/tahun; tanggal tanpa tahun diasumsikan 2026 dan diberi penanda.
-- Pencocokan nama memakai aturan; alias yang sangat berbeda hanya dibantu AI bila fitur AI aktif dan kuota tersedia.
-- Tanggal tanpa tahun diasumsikan 2026 (`DEFAULT_YEAR` di `data_processing.py`); ubah bila data periode lain dipakai.
-- Aplikasi tidak menggantikan pengecekan fisik stok.
+- Tanggal numerik dibaca hari/bulan/tahun; tanggal tanpa tahun diasumsikan 2026 dan diberi penanda (`DEFAULT_YEAR` di `data_processing.py`).
+- Pencocokan nama memakai aturan; padanan yang sangat berbeda dari data hanya dibantu AI bila fitur AI aktif dan kuota tersedia.
+- Keluaran AI dapat berbeda dari satu panggilan ke panggilan lain dan tidak boleh dianggap sebagai data sumber.
+- Aplikasi hanya membaca berkas di folder `data/` dan tidak terhubung ke sistem inventori.
+
+## Catatan data
+
+Repository ini menyertakan **data contoh untuk keperluan demonstrasi**. Jangan mengunggah data perusahaan yang bersifat rahasia
+ke repository publik.

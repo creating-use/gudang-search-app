@@ -25,8 +25,10 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable
 
+from data_processing import name_key
+
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-DEFAULT_MODEL = "gemini-3.5-flash-lite"  # PASTIKAN sama dengan model ID di Google AI Studio; ubah lewat secret GEMINI_MODEL
+DEFAULT_MODEL = "gemini-3.5-flash-lite"  # contoh; isi GEMINI_MODEL dengan model ID yang tersedia di akun Google AI Studio Anda
 
 
 # ------------------------------------------------------------------ konfigurasi
@@ -35,12 +37,12 @@ class LLMConfig:
     api_key: str = ""
     model: str = DEFAULT_MODEL
     enabled: bool = True              # saklar mati: LLM_ENABLED = "false"
-    # batas free tier yang tertera di AI Studio (model Gemini 3.5 Flash Lite): 15 RPM, 250K TPM, 500 RPD
+    # Batas kuota akun. Nilai bawaan ini konservatif: sesuaikan dengan kuota akun Anda (secrets LLM_RPM_LIMIT, dst.)
     rpm_limit: int = 15
     tpm_limit: int = 250_000
     rpd_limit: int = 500
     # tombol/AI disembunyikan jauh sebelum batas tercapai
-    rpm_hide_at: int = 8              # permintaan dalam 60 detik terakhir (aturan: sembunyikan di 8/15)
+    rpm_hide_at: int = 8              # permintaan dalam 60 detik terakhir; tombol AI disembunyikan jauh sebelum batas
     tpm_hide_fraction: float = 0.6    # >= 60% TPM terpakai dalam 60 detik terakhir
     rpd_hide_fraction: float = 0.8    # >= 80% RPD terpakai dalam 24 jam terakhir
     rewrite_reserve_rpm: int = 2      # REWRITE otomatis berhenti lebih awal agar tombol penjelasan tetap tersedia
@@ -57,6 +59,7 @@ class LLMConfig:
     cache_ttl_s: float = 3600.0
     cache_max: int = 200
     vocab_max: int = 100
+    debug: bool = False               # LLM_DEBUG = "true": tampilkan diagnostik (jawaban mentah AI) di sidebar
 
 
 def _truthy(v) -> bool:
@@ -81,6 +84,7 @@ def load_config(getter: Callable[[str, str | None], str | None]) -> LLMConfig:
         rpd_limit=num("LLM_RPD_LIMIT", d.rpd_limit, int), rpm_hide_at=num("LLM_RPM_HIDE_AT", d.rpm_hide_at, int),
         session_max_calls=num("LLM_SESSION_MAX_CALLS", d.session_max_calls, int),
         max_output_tokens=num("GEMINI_MAX_OUTPUT_TOKENS", d.max_output_tokens, int),
+        debug=_truthy(getter("LLM_DEBUG", "false")),
     )
 
 
@@ -278,21 +282,39 @@ def validate_explanation(answer: str, context: str, max_chars: int = 1200) -> bo
     return all(_norm_num(n) in allowed for n in NUM_RE.findall(body))
 
 
-def parse_rewrite(raw: str, vocab: list[str]) -> list[str]:
-    """Ambil nama dari JSON dan buang semua yang tidak persis ada pada vocab (case-insensitive)."""
-    raw = raw.strip()
-    raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.M).strip()
+def parse_rewrite_ex(raw: str, vocab: list[str]) -> tuple[list[str], bool]:
+    """Kembalikan (nama valid, apakah jawaban terbaca sebagai JSON).
+
+    Toleran terhadap pembungkus ```json, teks pembuka, kunci berbeda, dan perbedaan huruf/spasi/tanda baca.
+    Nama yang tidak ada pada vocab selalu dibuang.
+    """
+    text = re.sub(r"```(?:json)?", "", raw or "").strip()
+    m = re.search(r"\{.*\}|\[.*\]", text, flags=re.S)
+    if not m:
+        return [], False
     try:
-        names = json.loads(raw).get("nama", [])
-    except (ValueError, AttributeError):
-        return []
-    lookup = {v.lower(): v for v in vocab}
+        data = json.loads(m.group(0))
+    except ValueError:
+        return [], False
+    if isinstance(data, dict):
+        names = next((data[k] for k in ("nama", "names", "name", "items", "hasil") if k in data), [])
+    else:
+        names = data
+    if isinstance(names, str):
+        names = [names]
+    lookup: dict[str, list[str]] = {}
+    for v in vocab:
+        lookup.setdefault(name_key(v), []).append(v)   # beberapa nama bisa sepadan ("12 watt" dan "12W")
     out = []
     for n in names if isinstance(names, list) else []:
-        hit = lookup.get(str(n).strip().lower())
-        if hit and hit not in out:
-            out.append(hit)
-    return out[:3]
+        for hit in lookup.get(name_key(str(n)), []):
+            if hit not in out:
+                out.append(hit)
+    return out[:3], True
+
+
+def parse_rewrite(raw: str, vocab: list[str]) -> list[str]:
+    return parse_rewrite_ex(raw, vocab)[0]
 
 
 # ------------------------------------------------------------------ layanan
@@ -311,6 +333,7 @@ class LLMService:
         self.guard = UsageGuard(cfg, clock)
         self._cache: dict[tuple, tuple[float, object]] = {}
         self._clock_lock = threading.Lock()
+        self.last_debug: dict = {}
 
     # -- cache (jawaban yang sama tidak memakai kuota lagi)
     def _cache_get(self, key):
@@ -343,10 +366,13 @@ class LLMService:
             text, tokens = _extract_text(data)
         except LLMError as e:
             self.guard.record_failure(rate_limited=(e.kind == "rate_limit"), retry_after=e.retry_after)
+            self.last_debug = {"purpose": "json" if json_mode else "teks", "error": e.kind, "raw": ""}
             raise
         except Exception:  # apa pun yang tak terduga tidak boleh sampai ke pengguna
             self.guard.record_failure()
+            self.last_debug = {"purpose": "json" if json_mode else "teks", "error": "unexpected", "raw": ""}
             raise LLMError("unexpected") from None
+        self.last_debug = {"purpose": "json" if json_mode else "teks", "error": "", "raw": text[:600], "tokens": tokens}
         self.guard.record_tokens(tokens or (len(system) + len(user)) // 3)
         self.guard.record_success()
         return text
@@ -372,8 +398,15 @@ class LLMService:
             raw = self._call(REWRITE_SYSTEM, "DAFTAR:\n" + "\n".join(vocab) + f'\n\nKATA KUNCI: "{q}"', json_mode=True)
         except LLMError as e:
             return LLMOutcome(False, reason=e.kind, message="Pemahaman kata kunci oleh AI sedang tidak tersedia; memakai pencarian biasa.")
-        names = parse_rewrite(raw, vocab)
+        names, valid = parse_rewrite_ex(raw, vocab)
+        self.last_debug["parsed"] = names
+        if not valid:
+            return LLMOutcome(False, reason="invalid_output",
+                              message="Jawaban AI tidak bisa dipakai; memakai pencarian biasa.")
         self._cache_put(key, names)
+        if not names:
+            return LLMOutcome(True, [], reason="no_match",
+                              message="AI sudah dimintai bantuan, tetapi tidak menemukan nama barang yang cocok pada data.")
         return LLMOutcome(True, names)
 
     # -- (b) EXPLAIN

@@ -1,4 +1,4 @@
-"""Antarmuka web: Pencarian Informasi Stok dan Transaksi Gudang (CV Gudang Sejahtera, kasus simulasi)."""
+"""Antarmuka web: Gudang Search - pencarian informasi stok dan transaksi gudang."""
 import os
 import re
 
@@ -66,8 +66,7 @@ def set_query(text: str):
 
 
 st.title("Pencarian Informasi Stok dan Transaksi Gudang")
-st.caption("CV Gudang Sejahtera (kasus simulasi) · Gudang Search v1.1. "
-           "Data fiktif dan tidak mewakili perusahaan nyata.")
+st.caption("CV Gudang Sejahtera · Gudang Search v1.1 · Informasi stok dan transaksi dari berbagai sumber catatan gudang")
 
 with st.sidebar:
     st.header("Tentang aplikasi")
@@ -82,15 +81,25 @@ with st.sidebar:
         n = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
         st.write(f"- {label}: {n} baris")
     st.caption("Tanggal numerik dibaca sebagai hari/bulan/tahun. Tanggal tanpa tahun diasumsikan 2026 dan diberi penanda.")
-    st.subheader("Fitur AI")
-    snap = llm.snapshot(st.session_state["ai_calls"])
-    if snap["reason"] in ("disabled", "no_key"):
-        st.caption(snap["message"])
-    else:
-        st.write("Status: **aktif**" if snap["allowed"] else f"Status: **dibatasi sementara** · {snap['message']}")
-        st.caption(f"Pemakaian terhitung di server ini: {snap['rpm']}/{snap['rpm_limit']} permintaan per menit · "
-                   f"{snap['tokens_1m']:,}/{snap['tpm_limit']:,} token per menit · {snap['rpd']}/{snap['rpd_limit']} per 24 jam. "
-                   f"Sesi ini: {st.session_state['ai_calls']} panggilan.")
+    ai_slot = st.empty()   # diisi SETELAH pencarian berjalan agar hitungan pemakaian tidak telat satu langkah
+
+
+def render_ai_status():
+    """Status AI di sidebar; boleh dipanggil berulang (menimpa isi sebelumnya)."""
+    with ai_slot.container():
+        st.subheader("Fitur AI")
+        snap = llm.snapshot(st.session_state["ai_calls"])
+        if snap["reason"] in ("disabled", "no_key"):
+            st.caption(snap["message"])
+        else:
+            st.write("Status: **aktif**" if (snap["allowed"] or snap["reason"] == "interval")   # jeda 3 detik bukan pembatasan
+                     else f"Status: **dibatasi sementara** · {snap['message']}")
+        if llm.cfg.debug:
+            with st.expander("Diagnostik AI (LLM_DEBUG aktif)"):
+                st.caption("Hanya untuk uji. Matikan LLM_DEBUG setelah selesai.")
+                usage = {"permintaan_1_menit": f"{snap['rpm']}/{snap['rpm_limit']}", "token_1_menit": f"{snap['tokens_1m']}/{snap['tpm_limit']}",
+                         "permintaan_24_jam": f"{snap['rpd']}/{snap['rpd_limit']}", "panggilan_sesi_ini": st.session_state["ai_calls"]}
+                st.json({"model": llm.cfg.model, "pemakaian": usage, **(llm.last_debug or {"info": "belum ada panggilan"})})
 
 query = st.text_input("Cari nama barang, kode (mis. BRG001), atau lokasi rak (mis. A1)", key="query",
                       placeholder="Contoh: lampu LED 12W")
@@ -99,6 +108,7 @@ for row in (EXAMPLES[:4], EXAMPLES[4:]):
         col.button(ex, on_click=set_query, args=(ex,), key=f"ex_{ex}")
 
 if not query.strip():
+    render_ai_status()
     st.info("Masukkan nama atau kode barang, atau pilih salah satu contoh di atas.")
     st.stop()
 
@@ -114,9 +124,12 @@ if result.status == "not_found" and not re.search(r"brg\s*-?\s*\d", query.lower(
         merged = merge_by_names(conn, query, out.value)
         if merged:
             result = merged
+    elif out.reason == "no_match":
+        ai_notice = out.message              # AI dipanggil tetapi tidak ada padanan: tetap diberi tahu
     elif not out.ok and out.reason not in QUIET_REASONS:
         ai_notice = out.message or "Fitur AI sedang dibatasi; memakai pencarian biasa."
 
+render_ai_status()
 if result.status == "not_found":
     if ai_notice:
         st.caption(ai_notice)
@@ -146,6 +159,7 @@ if snap.allowed or snap.reason == "interval":   # jeda antarpanggilan hanya sebe
             st.session_state["ai_explain"][qkey] = out
 elif snap.reason not in QUIET_REASONS and qkey not in st.session_state["ai_explain"]:
     st.caption(f"Tombol penjelasan AI disembunyikan sementara untuk menjaga kuota. {snap.message}")
+render_ai_status()
 shown = st.session_state["ai_explain"].get(qkey)
 if shown is not None:
     if shown.ok:

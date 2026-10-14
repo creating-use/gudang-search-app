@@ -149,6 +149,30 @@ def test_konfigurasi_dari_secrets():
     assert cfg.api_key == "abc" and not cfg.enabled and cfg.rpm_hide_at == 5 and cfg.rpm_limit == 15
 
 
+def test_parser_toleran_bentuk_jawaban():
+    from llm_service import parse_rewrite_ex
+    ok = ["Lampu LED 12 watt", "Lampu LED 12W"]
+    assert parse_rewrite_ex('Berikut hasilnya: {"nama": ["lampu led 12 WATT"]}', VOCAB)[0] == ok       # teks pembuka + huruf berbeda
+    assert parse_rewrite_ex('["Lampu LED 12W"]', VOCAB)[0] == ok                                       # berupa list langsung
+    assert parse_rewrite_ex('{"names": "Lampu LED 12W"}', VOCAB)[0] == ok                              # kunci/tipe berbeda
+    assert parse_rewrite_ex("maaf saya tidak tahu", VOCAB) == ([], False)                              # bukan JSON
+    assert parse_rewrite_ex('{"nama": ["Rudal"]}', VOCAB) == ([], True)                                # valid tetapi bukan nama pada data
+
+
+def test_rewrite_no_match_dan_invalid_output_dibedakan():
+    s, f, _ = svc(reply('{"nama": []}'))
+    o = s.rewrite("sepeda motor", VOCAB); assert o.ok and o.value == [] and o.reason == "no_match" and "tidak menemukan" in o.message
+    s2, f2, _ = svc(reply("saya tidak bisa membantu"))
+    o2 = s2.rewrite("bohlam", VOCAB); assert not o2.ok and o2.reason == "invalid_output"
+
+
+def test_debug_menyimpan_jawaban_mentah_tanpa_kunci():
+    s, f, _ = svc(reply('{"nama": ["Lakban bening"]}', tokens=321))
+    s.rewrite("selotip", VOCAB)
+    d = s.last_debug; assert d["raw"].startswith('{"nama"') and d["tokens"] == 321 and d["parsed"] == ["Lakban bening"]
+    assert KEY not in json.dumps(d)
+
+
 # ---------------------------------------------------------------- pembaruan berkas Excel
 def _copy_master(tmp):
     dst = os.path.join(tmp, "master.xlsx"); shutil.copy(dp.MASTER_FILE, dst); return dst

@@ -23,7 +23,7 @@ def failing_transport(url, headers, body, timeout):
 
 
 def fresh(env, transport):
-    for k in ("GEMINI_API_KEY", "LLM_RPM_HIDE_AT", "LLM_ENABLED"):
+    for k in ("GEMINI_API_KEY", "LLM_RPM_HIDE_AT", "LLM_ENABLED", "LLM_DEBUG"):
         os.environ.pop(k, None)
     os.environ.update(env)
     llm_service.default_transport = transport
@@ -85,6 +85,37 @@ def test_api_gagal_tidak_memunculkan_error_mentah():
     at2 = search(fresh({"GEMINI_API_KEY": "k"}, failing_transport), "lampu LED 12W")
     [b for b in at2.button if b.label == "Jelaskan dengan AI"][0].click().run()
     assert not at2.exception and "tidak tersedia" in " ".join(w.value for w in at2.warning)
+
+
+def side(at):
+    return " ".join(x.value for g in (at.sidebar.markdown, at.sidebar.caption) for x in g)
+
+
+def empty_transport(url, headers, body, timeout):
+    CALLS.append(body)
+    return {"candidates": [{"content": {"parts": [{"text": '{"nama": []}'}]}}], "usageMetadata": {"totalTokenCount": 300}}
+
+
+def test_ai_dipanggil_tapi_tidak_ada_padanan_tetap_diberi_tahu():
+    at = search(fresh({"GEMINI_API_KEY": "k"}, empty_transport), "sepeda motor")
+    assert len(CALLS) == 1 and len(at.error) == 1
+    assert "tidak menemukan nama barang yang cocok" in " ".join(c.value for c in at.caption)
+
+
+def test_angka_pemakaian_tidak_tampil_di_sidebar_kecuali_debug():
+    at = search(fresh({"GEMINI_API_KEY": "k"}, fake_transport), "bohlam")
+    assert len(CALLS) == 1 and "Status: **aktif**" in side(at)
+    assert "permintaan per menit" not in side(at) and "/250" not in side(at) and not list(at.sidebar.json)
+    at2 = search(fresh({"GEMINI_API_KEY": "k", "LLM_DEBUG": "true"}, fake_transport), "bohlam")
+    usage = at2.sidebar.json[0].value
+    assert '"permintaan_1_menit": "1/15"' in usage.replace("':", '":').replace("'", '"') or "1/15" in usage   # hitungan tidak telat
+
+
+def test_panel_diagnostik_hanya_bila_debug_aktif():
+    at = search(fresh({"GEMINI_API_KEY": "k", "LLM_DEBUG": "true"}, fake_transport), "bohlam")
+    assert "Diagnostik AI" in " ".join(e.label for e in at.sidebar.expander)
+    at2 = search(fresh({"GEMINI_API_KEY": "k"}, fake_transport), "bohlam")
+    assert not list(at2.sidebar.expander)
 
 
 if __name__ == "__main__":
