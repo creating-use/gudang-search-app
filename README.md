@@ -7,42 +7,31 @@ tidak lengkap, bukan satu angka stok yang dianggap pasti. Aplikasi bersifat hany
 ## Cara menggunakan
 
 1. **Buka aplikasi** melalui browser. Tidak ada login.
-2. **Ketik pencarian** pada kolom di bagian atas, lalu tekan Enter. Anda dapat mencari dengan:
-   - nama barang, mis. `lampu LED 12W` (penulisan yang sedikit berbeda tetap dikenali),
-   - kode barang, mis. `BRG013`,
-   - lokasi rak, mis. `A1`,
-   - atau memilih salah satu tombol contoh di bawah kolom pencarian.
-3. **Baca hasilnya.** Setiap kandidat menampilkan:
-
-   | Bagian | Artinya |
-   |---|---|
-   | Perlu verifikasi | Peringatan data: angka stok berbeda antar sumber, nilai perkiraan atau kosong, kode berbeda dengan nama serupa, transaksi ganda, dan sejenisnya |
-   | Nilai stok per sumber | Angka dari tiap sumber, lengkap dengan rujukan (nama sheet dan nomor baris) agar dapat dicek ulang |
-   | Barang dengan nama serupa | Barang lain yang mungkin sama; **tidak digabung** otomatis |
-   | Transaksi | Catatan barang masuk dan keluar. Total masuk/keluar bukan stok akhir karena saldo awal tidak tersedia |
-   | Catatan WhatsApp | Pesan yang menyebut barang tersebut |
-
-4. **Pertanyaan umum.** Ketik `stok menipis` untuk melihat barang di bawah stok minimum atau yang stoknya tidak jelas, atau
-   `data perlu verifikasi` untuk daftar barang yang memiliki peringatan data.
-5. **Jika data tidak ada**, aplikasi menyatakan tidak ditemukan dan tidak mengarang hasil. Itu tidak berarti barangnya tidak
-   ada secara fisik: periksa ejaan, coba kata kunci lain, atau cek catatan sumber.
+2. **Ketik pencarian** pada kolom di bagian atas, lalu tekan Enter. Anda dapat mencari dengan nama barang
+   (mis. `lampu LED 12W`), kode barang (mis. `BRG013`), atau lokasi rak (mis. `A1`). Tombol contoh di bawah kolom juga bisa dipakai.
+3. **Baca hasilnya.** Setiap kandidat menampilkan peringatan **Perlu verifikasi**, nilai stok per sumber beserta rujukan
+   (nama sheet dan nomor baris), barang bernama serupa (tidak digabung otomatis), transaksi masuk dan keluar, serta catatan WhatsApp
+   yang menyebut barang tersebut. Total masuk/keluar bukan stok akhir karena saldo awal tidak tersedia.
+4. **Pertanyaan umum.** Ketik `stok menipis` untuk barang di bawah stok minimum atau yang stoknya tidak jelas, atau
+   `data perlu verifikasi` untuk barang yang memiliki peringatan data.
+5. **Jika data tidak ada**, aplikasi menyatakan tidak ditemukan dan tidak mengarang hasil. Periksa ejaan atau coba kata kunci lain.
 
 ## Fitur AI (opsional)
 
-Pencarian utama berbasis aturan dan selalu berjalan lebih dulu. Fitur AI hanya aktif bila kunci API dikonfigurasi; tanpa itu
-aplikasi tetap berfungsi penuh. AI dipakai pada dua keadaan:
+Pencarian utama berbasis aturan dan selalu berjalan lebih dulu. Fitur AI hanya aktif bila kunci API diatur; tanpa itu aplikasi
+tetap berfungsi penuh. AI dipakai untuk dua hal:
 
 - **Memahami kata kunci.** Bila aturan tidak menemukan hasil, AI memetakan kata kunci ke nama barang yang ada pada data
-  (misalnya "bohlam" ke "lampu"). Hasilnya tetap dicari dari data; nama di luar data diabaikan.
-- **Penjelasan hasil.** Tombol **Jelaskan dengan AI** menyusun ringkasan dari hasil yang sudah ditemukan, dengan rujukan
-  sheet dan baris. Jawaban yang memuat angka yang tidak ada pada data ditolak. Penjelasan AI bukan data sumber: selalu periksa rujukannya.
+  (mis. "bohlam" ke "lampu"). Hasilnya tetap dicari dari data.
+- **Penjelasan hasil.** Tombol **Jelaskan dengan AI** meringkas hasil yang sudah ditemukan. Jawaban yang memuat angka di luar
+  data ditolak. Penjelasan AI bukan data sumber, jadi tetap periksa rujukannya.
 
-Bila AI tidak dapat dipanggil (kuota, jaringan, kunci tidak diatur, atau jawaban tidak lolos validasi), aplikasi kembali ke
-hasil berbasis aturan dan menampilkan pesan singkat.
+Bila AI tidak dapat dipanggil (kuota, jaringan, kunci belum diatur, atau jawaban tidak valid), aplikasi kembali ke hasil
+berbasis aturan dan menampilkan pesan singkat.
 
 ### Mengatur AI
 
-Simpan kunci di pengaturan *secrets* platform atau di `.streamlit/secrets.toml` (sudah masuk `.gitignore`); **jangan** menaruhnya
+Simpan kunci di pengaturan *secrets* platform atau di `.streamlit/secrets.toml` (sudah masuk `.gitignore`). **Jangan** menaruhnya
 di kode atau repository. Contoh ada pada `.streamlit/secrets.toml.example`:
 
 ```
@@ -50,30 +39,17 @@ GEMINI_API_KEY = "isi-kunci-api-anda"
 GEMINI_MODEL = "isi-model-id-yang-tersedia-di-akun-anda"
 ```
 
-### Rekomendasi pengaturan batas pemakaian
+### Pengaturan batas pemakaian
 
-Sesuaikan dengan kuota akun Anda. Nilai bawaan ada di `llm_service.py` dan dapat diubah lewat secrets.
+Sesuaikan dengan kuota akun Anda; nilai bawaan ada di `llm_service.py` dan dapat diubah lewat secrets.
 
-- Sembunyikan tombol AI **jauh sebelum** batas permintaan per menit dan per hari tercapai, dan sisakan cadangan untuk penjelasan lewat tombol.
-- Batasi jumlah panggilan per sesi pengguna dan beri jeda minimal antarpanggilan.
-- Simpan jawaban untuk pertanyaan yang sama agar tidak memakai kuota lagi.
-- Jeda otomatis setelah error batas penggunaan dari penyedia API, dan setelah beberapa kegagalan beruntun.
+- Sembunyikan tombol AI jauh sebelum batas per menit dan per hari tercapai.
+- Batasi panggilan per sesi, beri jeda antarpanggilan, dan simpan jawaban yang sama agar tidak memakai kuota lagi.
+- Beri jeda otomatis setelah error batas dari penyedia API dan setelah beberapa kegagalan beruntun.
 - Batasi panjang kata kunci, jumlah data yang dikirim, dan panjang jawaban.
 - Sediakan saklar mati (`LLM_ENABLED = "false"`) untuk mematikan AI tanpa mengubah kode.
-- Hitungan pemakaian pada aplikasi bersifat perkiraan (disimpan di memori dan kembali nol saat aplikasi restart), jadi sisakan margin dari batas sebenarnya.
-- Gunakan `LLM_DEBUG = "true"` hanya sementara saat menguji: panel diagnostiknya terlihat semua pengunjung.
-
-## Memperbarui data
-
-Data dibaca dari dua berkas Excel di folder `data/`. Untuk memperbarui, **ganti isi berkas dengan nama yang sama**, lalu
-commit ke repository (atau jalankan ulang aplikasi bila dipakai lokal).
-
-- `Berkas_Gudang_Dari_Perusahaan.xlsx` harus memiliki sheet `Stok Barang`, `Barang Masuk`, `Barang Keluar`, dan `Catatan WA`
-  (huruf besar/kecil bebas).
-- `Catatan_Stok_Akhir.xlsx`: sheet pertama yang dibaca, namanya bebas.
-- Kolom dikenali dari **nama header**, bukan urutan. Kolom dan baris baru boleh ditambahkan; baris kosong dilewati.
-- Kolom wajib: Stok Barang (kode, nama, stok), Barang Masuk/Keluar (tanggal, kode, jumlah), Catatan WA (tanggal, pesan), Stok Akhir (kode, qty).
-  Jika sheet atau kolom wajib hilang, aplikasi menampilkan pesan yang menyebut apa yang kurang.
+- Hitungan pemakaian bersifat perkiraan dan kembali nol saat aplikasi restart, jadi sisakan margin.
+- Nyalakan `LLM_DEBUG = "true"` hanya sementara saat menguji; panelnya terlihat semua pengunjung.
 
 ## Menjalankan di komputer sendiri
 
@@ -93,9 +69,8 @@ Platform apa pun yang dapat menjalankan aplikasi Python dari repository bisa dip
 | Entry file (jika diminta) | `app.py` |
 | Secrets | Opsional; hanya untuk fitur AI |
 
-Catatan: basis data SQLite dibangun ulang dari Excel setiap aplikasi mulai, jadi tidak bergantung pada file lokal yang permanen.
-Beberapa platform gratis menidurkan aplikasi saat sepi; buka aplikasi beberapa menit sebelum dipakai. Batas fitur gratis tiap
-platform dapat berubah, jadi periksa dokumentasi platform.
+Basis data SQLite dibangun ulang dari Excel setiap aplikasi mulai, jadi tidak bergantung pada file lokal yang permanen.
+Platform gratis dapat menidurkan aplikasi saat sepi; buka aplikasi beberapa menit sebelum dipakai.
 
 ## Struktur proyek
 
@@ -104,19 +79,17 @@ platform dapat berubah, jadi periksa dokumentasi platform.
 | `app.py` | Antarmuka web (Streamlit) |
 | `data_processing.py` | Membaca Excel, menormalisasi, membangun SQLite di memori |
 | `search_service.py` | Logika pencarian, pencocokan, dan peringatan (berbasis aturan) |
-| `llm_service.py` | Lapisan AI opsional: klien API, pagar pemakaian, validasi keluaran |
+| `llm_service.py` | Lapisan AI opsional: klien API, pembatas pemakaian, validasi keluaran |
 | `data/` | Berkas data Excel |
-| `tests/` | Uji logika, uji AI (tanpa memanggil API sungguhan), dan uji asap antarmuka |
+| `tests/` | Uji logika, uji AI (tanpa memanggil layanan AI sungguhan), dan uji tampilan |
 | `requirements.txt` | Daftar dependency |
-
-Menjalankan uji: `python tests/test_search.py`, `python tests/test_llm.py`, `python tests/test_app_ai.py`, `python tests/test_app_smoke.py`.
 
 ## Keterbatasan
 
 - Total masuk/keluar bukan stok akhir karena saldo awal tidak ada pada data.
-- Tanggal numerik dibaca hari/bulan/tahun; tanggal tanpa tahun diasumsikan 2026 dan diberi penanda (`DEFAULT_YEAR` di `data_processing.py`).
-- Pencocokan nama memakai aturan; padanan yang sangat berbeda dari data hanya dibantu AI bila fitur AI aktif dan kuota tersedia.
-- Keluaran AI dapat berbeda dari satu panggilan ke panggilan lain dan tidak boleh dianggap sebagai data sumber.
+- Tanggal numerik dibaca hari/bulan/tahun; tanggal tanpa tahun diasumsikan 2026 dan diberi penanda.
+- Padanan nama yang sangat berbeda dari data hanya dibantu AI bila fitur AI aktif dan kuota tersedia.
+- Keluaran AI dapat berbeda antarpanggilan dan tidak boleh dianggap data sumber.
 - Aplikasi hanya membaca berkas di folder `data/` dan tidak terhubung ke sistem inventori.
 
 ## Catatan data
